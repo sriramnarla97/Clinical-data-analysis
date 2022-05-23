@@ -1,0 +1,81 @@
+Clinicaltrial_2021 table creation
+
+CREATE EXTERNAL TABLE IF NOT EXISTS `clinicaltrail`.`clinicaltrail_2021` (
+	`id` string,
+	`sponsor` string,
+	`status` string,
+	`start` string,
+	`completion` string,
+	`type` string,
+	`submission` string,
+	`conditions` string,
+	`interventions` string
+) ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' WITH SERDEPROPERTIES (
+	'serialization.format' = ',',
+	'field.delim' = '|'
+) LOCATION 's3://srirambdttathenaassignment/Clinical data/' TBLPROPERTIES ('skip.header.line.count' = '1');
+
+Pharma table creation:
+
+CREATE EXTERNAL TABLE IF NOT EXISTS `clinicaltrail`.`pharma_table` (
+	`company` string,`parent_company` string,`penalty_amount` string,`subtraction_from_penalty` string,
+	`penalty_amount_adjusted_for_eliminating_multiple_counting` string,`penalty_year` string,`penalty_date` string,
+	`offense_group` string,`primary_offense` string,`secondary_offense` string,`description` string,
+	`level_of_government` string,`action_type` string,`agency` string,`civil_criminal` string,
+	`prosecution_agreement` string,`court` string,`case_id` string,`private_litigation_case_title` string,
+	`lawsuit_resolution` string,`facility_state` string,`city` string,`address` string,`zip` string,
+	`naics_code` string,`naics_translation` string,`hq_country_of_parent` string,`hq_state_of_parent` string,
+	`ownership_structure` string,`parent_company_stock_ticker` string,`major_industry_of_parent` string,
+	`specific_industry_of_parent` string,`info_source` string,`notes` string
+) ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' WITH SERDEPROPERTIES (
+	'serialization.format' = ',',
+	'field.delim' = ','
+) LOCATION 's3://srirambdttathenaassignment/Pharma data/' TBLPROPERTIES ('skip.header.line.count' = '1');
+
+Mesh data creation:
+
+CREATE EXTERNAL TABLE IF NOT EXISTS `clinicaltrail`.`mesh_table` (`term` string, `tree` string) ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' WITH SERDEPROPERTIES (
+	'serialization.format' = ',',
+	'field.delim' = ','
+) LOCATION 's3://srirambdttathenaassignment/mesh data/' TBLPROPERTIES ('skip.header.line.count' = '1');
+
+
+Question 1:
+
+SELECT distinct count(Id) as distinct_count FROM "clinicaltrail"."clinicaltrail_2021"
+
+Question 2:
+
+select Type,count(Type) as frequency from "clinicaltrail"."clinicaltrail_2021"
+group by Type order by frequency desc
+
+Question 3:
+
+select conditions_split as Conditions,count(conditions_split) as Frequncy from (
+       select conditions_split from clinicaltrail_2021 
+       CROSS JOIN UNNEST(split(conditions,',')) as t(conditions_split) where trim(conditions_split) != '') 
+       group by conditions_split order by Frequncy desc limit 5;
+
+Question 4:
+
+select tree_code,count(tree_code) as frequency from
+        (select conditions_split from clinicaltrail_2021 
+        CROSS JOIN UNNEST(split(conditions,',')) as t(conditions_split) where trim(conditions_split) != '') as c 
+        left join 
+        (select term,element_At(split(tree,'.'),1) as tree_code from mesh_table) as m on c.conditions_split = m.term 
+        group by tree_code order by frequency desc limit 10
+
+Question 5:
+
+select Sponsor,count(Sponsor) as count from "clinicaltrail"."clinicaltrail_2021" 
+        where Sponsor not in (select REPLACE(parent_company,'"','') as parent from "clinicaltrail"."pharma_table")
+        group by Sponsor order by count desc limit 10
+
+Question 6:
+
+select element_at(split(completion,' '),1) as completed_month,count(element_at(split(Completion,' '),1)) as count
+from clinicaltrail_2021
+where status='Completed' 
+group by element_at(split(completion,' '),1),element_at(split(Completion,' '),2),concat('01 ',completion)
+having element_at(split(Completion,' '),2) = '2021' 
+order by date_parse(upper(replace(concat('01 ',completion),' ','')),'%d%b%Y')
